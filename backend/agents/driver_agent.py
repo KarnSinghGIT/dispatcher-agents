@@ -55,19 +55,26 @@ async def entrypoint(ctx: JobContext):
     # Create the agent session with OpenAI Realtime
     logger.info("Creating agent session with OpenAI Realtime API...")
     
-    # OpenAI Realtime API has built-in VAD, so we don't need separate VAD
-    # Instructions/system prompt should be passed via AgentSession initial_prompts
+    # Create RealtimeModel with system instructions
+    # For OpenAI Realtime API, we need to pass instructions through the model's chat context
+    realtime_model = openai.realtime.RealtimeModel(
+        model="gpt-4o-realtime-preview-2024-10-01",
+        voice="echo",  # Different voice from dispatcher
+        temperature=0.8,
+    )
+    
+    # Create AgentSession with the model
     agent = agents.voice.AgentSession(
-        llm=openai.realtime.RealtimeModel(
-            model="gpt-4o-realtime-preview-2024-10-01",
-            voice="echo",  # Different voice from dispatcher
-            temperature=0.8,
-        ),
-        initial_prompts=[agents.llm.ChatMessage(role="system", content=system_prompt)],
+        llm=realtime_model,
     )
     
     # Start the agent
     agent.start(ctx.room)
+    
+    # Add system prompt to the chat context after session starts
+    # The agent's LLM chat context can be accessed and modified
+    if hasattr(agent, 'llm') and hasattr(agent.llm, 'chat'):
+        agent.llm.chat.add_message(role="system", content=system_prompt)
     
     logger.info("Driver agent is active and listening")
     
