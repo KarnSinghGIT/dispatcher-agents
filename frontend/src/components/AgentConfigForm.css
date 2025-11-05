@@ -1,0 +1,65 @@
+.agent-config-form {
+  background: white;
+  padding: 2rem;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
+}
+
+.agent-config-form h2 {
+  margin: 0 0 1.5rem 0;
+  color: #333;
+}
+
+.agent-config-form .form-group {
+  margin-bottom: 1rem;
+}
+
+.agent-config-form .form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: #555;
+}
+
+.agent-config-form textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 1rem;
+  font-family: inherit;
+  resize: vertical;
+  transition: border-color 0.3s;
+}
+
+.agent-config-form textarea:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+@media (prefers-color-scheme: dark) {
+  .agent-config-form {
+    background: #1a1a1a;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  }
+
+  .agent-config-form h2 {
+    color: #e0e0e0;
+  }
+
+  .agent-config-form .form-group label {
+    color: #b0b0b0;
+  }
+
+  .agent-config-form textarea {
+    background: #2a2a2a;
+    border-color: #444;
+    color: #e0e0e0;
+  }
+
+  .agent-config-form textarea:focus {
+    border-color: #667eea;
+  }
+}
+

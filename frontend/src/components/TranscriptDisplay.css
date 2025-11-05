@@ -1,0 +1,77 @@
+.transcript-display {
+  background: white;
+  padding: 2rem;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
+}
+
+.transcript-display h2 {
+  margin: 0 0 1.5rem 0;
+  color: #333;
+}
+
+.transcript-content {
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.turn {
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border-radius: 8px;
+  position: relative;
+}
+
+.turn-dispatcher {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  margin-right: 3rem;
+}
+
+.turn-driver {
+  background: #f3f4f6;
+  color: #333;
+  margin-left: 3rem;
+}
+
+.speaker-badge {
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.turn-dispatcher .speaker-badge {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.turn-driver .speaker-badge {
+  color: #667eea;
+}
+
+.text {
+  line-height: 1.6;
+  margin-bottom: 0.5rem;
+}
+
+.timestamp {
+  font-size: 0.8rem;
+  opacity: 0.7;
+  text-align: right;
+}
+
+@media (prefers-color-scheme: dark) {
+  .transcript-display {
+    background: #1a1a1a;
+  }
+
+  .transcript-display h2 {
+    color: #e0e0e0;
+  }
+
+  .turn-driver {
+    background: #2a2a2a;
+    color: #e0e0e0;
+  }
+}
+

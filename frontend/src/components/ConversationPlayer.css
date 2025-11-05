@@ -1,0 +1,49 @@
+.conversation-player {
+  background: white;
+  padding: 2rem;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+.conversation-player h2 {
+  margin: 0 0 1.5rem 0;
+  color: #333;
+}
+
+.conversation-player .placeholder {
+  padding: 2rem;
+  background: rgba(102, 126, 234, 0.1);
+  border-radius: 8px;
+  border: 2px dashed rgba(102, 126, 234, 0.3);
+}
+
+.conversation-player .placeholder p {
+  margin: 0.5rem 0;
+  color: #667eea;
+}
+
+.conversation-player .placeholder .note {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.audio-player {
+  width: 100%;
+  max-width: 600px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .conversation-player {
+    background: #1a1a1a;
+  }
+
+  .conversation-player h2 {
+    color: #e0e0e0;
+  }
+
+  .conversation-player .placeholder .note {
+    color: #aaa;
+  }
+}
+

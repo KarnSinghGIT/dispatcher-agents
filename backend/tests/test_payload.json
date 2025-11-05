@@ -1,0 +1,27 @@
+{
+  "scenario": {
+    "loadId": "HDX-2478",
+    "loadType": "HVAC units",
+    "weight": 42000,
+    "pickupLocation": "Dallas TX",
+    "pickupTime": "8 AM",
+    "pickupType": "live",
+    "deliveryLocation": "Atlanta GA",
+    "deliveryDeadline": "before noon next day",
+    "trailerType": "dry-van",
+    "ratePerMile": 2.10,
+    "totalRate": 1680,
+    "accessorials": "none",
+    "securementRequirements": "two-strap securement",
+    "tmsUpdate": "Macro-1 update when empty"
+  },
+  "dispatcherAgent": {
+    "role": "dispatcher",
+    "prompt": "You are Tim, dispatcher at Dispatch Co."
+  },
+  "driverAgent": {
+    "role": "driver",
+    "prompt": "You are Chris, a driver."
+  }
+}
+
