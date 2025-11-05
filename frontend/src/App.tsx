@@ -111,10 +111,12 @@ function App() {
                 <h3>❌ Error</h3>
                 <p>{error}</p>
                 <p className="error-hint">
-                  Make sure:
-                  <br />• Backend server is running
-                  <br />• LiveKit credentials are configured
-                  <br />• Agent workers are started
+                  <strong>Checklist:</strong>
+                  <br />• Backend server is running (http://localhost:8000)
+                  <br />• LiveKit server is running (ws://localhost:7880)
+                  <br />• LiveKit credentials are in backend/.env
+                  <br />• Multi-agent worker is running (see instructions below)
+                  <br />• Check terminal logs for "Worker registered" and both agents starting
                 </p>
               </div>
             )}
@@ -133,12 +135,34 @@ function App() {
             </div>
 
             <div className="agent-status">
-              <h3>📡 Agent Instructions</h3>
-              <p>Make sure both agent workers are running:</p>
-              <pre>
-                Terminal 1: python backend/agents/dispatcher_agent.py{'\n'}
-                Terminal 2: python backend/agents/driver_agent.py
-              </pre>
+              <h3>📡 Important Setup Instructions</h3>
+              <div className="setup-steps">
+                <div className="setup-step">
+                  <div className="step-number">1</div>
+                  <div className="step-content">
+                    <h4>Start LiveKit Server</h4>
+                    <p>Make sure LiveKit server is running on localhost:7880</p>
+                  </div>
+                </div>
+                <div className="setup-step">
+                  <div className="step-number">2</div>
+                  <div className="step-content">
+                    <h4>Start Multi-Agent Worker</h4>
+                    <pre>
+cd backend && python agents/multi_agent_worker.py dev
+                    </pre>
+                    <p className="hint">This single worker runs both agents in the same room</p>
+                  </div>
+                </div>
+                <div className="setup-step">
+                  <div className="step-number">3</div>
+                  <div className="step-content">
+                    <h4>Wait for Confirmation</h4>
+                    <p>You should see "Worker registered" and then both agent sessions starting</p>
+                  </div>
+                </div>
+              </div>
+              <p className="warning-note">⚠️ Agents must be running BEFORE creating a room!</p>
             </div>
           </div>
         )}
