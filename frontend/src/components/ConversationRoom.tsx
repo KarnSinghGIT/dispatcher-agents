@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { LiveKitRoom, RoomAudioRenderer, useParticipants, ParticipantTile } from '@livekit/components-react';
+import React, { useState } from 'react';
+import { LiveKitRoom, RoomAudioRenderer, useParticipants } from '@livekit/components-react';
 import type { RoomInfo } from '../types';
 import './ConversationRoom.css';
 
@@ -12,17 +12,27 @@ function RoomParticipants() {
   
   return (
     <div className="participants-grid">
-      {participants.map((participant) => (
-        <div key={participant.identity} className="participant-card">
-          <div className="participant-icon">
-            {participant.identity === 'dispatcher' ? '👔' : '🚚'}
+      {participants.map((participant) => {
+        // Determine participant type by name or identity
+        const isDispatcher = participant.name?.toLowerCase().includes('dispatcher') || 
+                            participant.name?.toLowerCase().includes('tim') ||
+                            participant.identity?.toLowerCase().includes('dispatcher');
+        const isDriver = participant.name?.toLowerCase().includes('driver') || 
+                        participant.name?.toLowerCase().includes('chris') ||
+                        participant.identity?.toLowerCase().includes('driver');
+        
+        return (
+          <div key={participant.identity} className="participant-card">
+            <div className="participant-icon">
+              {isDispatcher ? '👔' : isDriver ? '🚚' : '👤'}
+            </div>
+            <h3>{participant.name || participant.identity}</h3>
+            <div className="audio-indicator">
+              {participant.isSpeaking ? '🔊 Speaking...' : '🔇 Listening'}
+            </div>
           </div>
-          <h3>{participant.name || participant.identity}</h3>
-          <div className="audio-indicator">
-            {participant.isSpeaking ? '🔊 Speaking...' : '🔇 Listening'}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -48,12 +58,6 @@ export const ConversationRoom: React.FC<ConversationRoomProps> = ({ roomInfo }) 
         connect={true}
         audio={false}
         video={false}
-        options={{
-          publishDefaults: {
-            audio: false,
-            video: false,
-          },
-        }}
         onConnected={() => setRoomState('connected')}
         onDisconnected={() => setRoomState('disconnected')}
         className="livekit-room-container"
