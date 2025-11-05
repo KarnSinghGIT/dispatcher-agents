@@ -207,11 +207,47 @@ async def dispatch_agents(room_name: str):
     """
     Dispatch agent workers to the room.
     
-    In a production setup, this would trigger your agent workers to join the room.
-    For now, agents should be started separately and will automatically join new rooms.
+    This endpoint provides information about agent dispatch.
+    Both agents should be running as workers and will automatically join new rooms.
+    Make sure both dispatcher_agent.py and driver_agent.py are running before creating a room.
     """
-    return {
-        "message": "Agents should be running as workers and will join automatically",
-        "roomName": room_name,
-        "instructions": "Start dispatcher_agent.py and driver_agent.py in separate terminals"
-    }
+    try:
+        # Check if room exists and get participant count
+        livekit_url = os.getenv("LIVEKIT_URL")
+        api_key = os.getenv("LIVEKIT_API_KEY")
+        api_secret = os.getenv("LIVEKIT_API_SECRET")
+        
+        if all([livekit_url, api_key, api_secret]):
+            lk_api = api.LiveKitAPI(
+                url=livekit_url,
+                api_key=api_key,
+                api_secret=api_secret
+            )
+            
+            try:
+                participants = await lk_api.room.list_participants(
+                    api.ListParticipantsRequest(room=room_name)
+                )
+                participant_count = len(participants)
+            except:
+                participant_count = 0
+            
+            await lk_api.aclose()
+        else:
+            participant_count = 0
+        
+        return {
+            "message": "Agent dispatch information",
+            "roomName": room_name,
+            "currentParticipants": participant_count,
+            "instructions": "Ensure both dispatcher_agent.py and driver_agent.py are running. They will automatically join new rooms when created.",
+            "expectedAgents": 2,
+            "note": "Each agent runs as a separate worker with unique agent_name"
+        }
+    except Exception as e:
+        return {
+            "message": "Could not check room status",
+            "roomName": room_name,
+            "error": str(e),
+            "instructions": "Start dispatcher_agent.py and driver_agent.py in separate terminals"
+        }
