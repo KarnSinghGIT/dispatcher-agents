@@ -79,7 +79,9 @@ async def entrypoint(ctx: JobContext):
     
     This agent joins a LiveKit room and acts as the dispatcher using OpenAI Realtime API.
     """
-    logger.info(f"Dispatcher agent starting in room: {ctx.room.name}")
+    logger.info(f"=== DISPATCHER AGENT STARTING ===")
+    logger.info(f"Room: {ctx.room.name}")
+    logger.info(f"Worker: {ctx.worker.name if hasattr(ctx, 'worker') else 'unknown'}")
     
     # Create the agent session with OpenAI Realtime API
     session = AgentSession(
@@ -96,8 +98,20 @@ async def entrypoint(ctx: JobContext):
     
     logger.info("Dispatcher agent session started")
     
+    # Log current participants
+    participants = list(ctx.room.remote_participants.values())
+    logger.info(f"Current participants in room: {len(participants)}")
+    for p in participants:
+        logger.info(f"  - {p.identity} ({p.name or 'no name'})")
+    
     # Wait for other participants to join
     await asyncio.sleep(2)
+    
+    # Check again after delay
+    participants = list(ctx.room.remote_participants.values())
+    logger.info(f"Participants after delay: {len(participants)}")
+    for p in participants:
+        logger.info(f"  - {p.identity} ({p.name or 'no name'})")
     
     # Generate initial greeting to start the conversation
     await session.generate_reply()
@@ -106,7 +120,7 @@ async def entrypoint(ctx: JobContext):
 
 
 if __name__ == "__main__":
-    # Worker options
+    # Worker options - no agent_name to allow multiple workers per room
     worker_opts = WorkerOptions(
         entrypoint_fnc=entrypoint,
     )

@@ -77,7 +77,9 @@ async def entrypoint(ctx: JobContext):
     
     This agent joins a LiveKit room and acts as the driver using OpenAI Realtime API.
     """
-    logger.info(f"Driver agent starting in room: {ctx.room.name}")
+    logger.info(f"=== DRIVER AGENT STARTING ===")
+    logger.info(f"Room: {ctx.room.name}")
+    logger.info(f"Worker: {ctx.worker.name if hasattr(ctx, 'worker') else 'unknown'}")
     
     # Create the agent session with OpenAI Realtime API
     session = AgentSession(
@@ -94,12 +96,18 @@ async def entrypoint(ctx: JobContext):
     
     logger.info("Driver agent session started and listening")
     
+    # Log current participants
+    participants = list(ctx.room.remote_participants.values())
+    logger.info(f"Current participants in room: {len(participants)}")
+    for p in participants:
+        logger.info(f"  - {p.identity} ({p.name or 'no name'})")
+    
     # The driver will respond when the dispatcher speaks
     # No need to initiate - just listen and respond
 
 
 if __name__ == "__main__":
-    # Worker options
+    # Worker options - no agent_name to allow multiple workers per room
     worker_opts = WorkerOptions(
         entrypoint_fnc=entrypoint,
     )
