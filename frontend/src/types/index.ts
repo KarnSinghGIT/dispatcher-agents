@@ -21,6 +21,13 @@ export interface AgentConfig {
   actingNotes?: string;
 }
 
+export interface ConversationStatus {
+  status: 'active' | 'concluded' | 'recording' | 'ready_for_playback';
+  conversationId: string;
+  recordingUrl?: string;
+  transcript?: ConversationTurn[];
+}
+
 export interface ConversationRequest {
   scenario: Scenario;
   dispatcherAgent: AgentConfig;
