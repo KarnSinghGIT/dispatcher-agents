@@ -1,176 +1,227 @@
-import React, { useState, useEffect } from 'react';
-import type { ConversationTurn } from '../types';
+import React, { useState, useEffect, useRef } from 'react';
 import './ConversationPlayer.css';
 
 interface ConversationPlayerProps {
   conversationId: string;
-  recordingUrl?: string;
-  transcript?: ConversationTurn[];
+  audioUrl?: string;
 }
 
 export const ConversationPlayer: React.FC<ConversationPlayerProps> = ({
   conversationId,
-  recordingUrl,
-  transcript = []
+  audioUrl
 }) => {
+  const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTurnIndex, setCurrentTurnIndex] = useState(0);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [isBuffering, setIsBuffering] = useState(!audioUrl);
+  const [retryCount, setRetryCount] = useState(0);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
-  const handlePlayPause = () => {
+  // Poll for audio file if buffering
+  useEffect(() => {
+    if (!audioUrl || !isBuffering) return;
+
+    console.log(`[PLAYER] Polling for audio file... (attempt ${retryCount + 1})`);
+    
+    const poll = async () => {
+      try {
+        const response = await fetch(audioUrl, { method: 'HEAD' });
+        if (response.ok) {
+          console.log('[PLAYER] ✓ Audio file ready!');
+          setIsBuffering(false);
+          // Force reload the audio element
+          if (audioRef.current) {
+            audioRef.current.load();
+          }
+        }
+      } catch (error) {
+        console.log('[PLAYER] Audio not ready yet, retrying...');
+        setRetryCount(prev => prev + 1);
+      }
+    };
+
+    // Poll every 2 seconds
+    pollingRef.current = setInterval(poll, 2000);
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+      }
+    };
+  }, [audioUrl, isBuffering, retryCount]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const updateTime = () => setCurrentTime(audio.currentTime);
+    const updateDuration = () => {
+      setDuration(audio.duration);
+      setIsBuffering(false); // File loaded successfully
+    };
+    const handleEnded = () => setIsPlaying(false);
+    const handleError = () => {
+      console.log('[PLAYER] Audio error, will retry...');
+      setIsBuffering(true);
+    };
+
+    audio.addEventListener('timeupdate', updateTime);
+    audio.addEventListener('loadedmetadata', updateDuration);
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('error', handleError);
+
+    return () => {
+      audio.removeEventListener('timeupdate', updateTime);
+      audio.removeEventListener('loadedmetadata', updateDuration);
+      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('error', handleError);
+    };
+  }, []);
+
+  const togglePlayPause = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (isPlaying) {
+      audio.pause();
+    } else {
+      audio.play();
+    }
     setIsPlaying(!isPlaying);
   };
 
-  const handleNext = () => {
-    if (currentTurnIndex < transcript.length - 1) {
-      setCurrentTurnIndex(currentTurnIndex + 1);
-    }
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const newTime = parseFloat(e.target.value);
+    audio.currentTime = newTime;
+    setCurrentTime(newTime);
   };
 
-  const handlePrevious = () => {
-    if (currentTurnIndex > 0) {
-      setCurrentTurnIndex(currentTurnIndex - 1);
-    }
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const newVolume = parseFloat(e.target.value);
+    audio.volume = newVolume;
+    setVolume(newVolume);
   };
 
-  const handleReset = () => {
-    setCurrentTurnIndex(0);
-    setIsPlaying(false);
+  const skip = (seconds: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    audio.currentTime = Math.max(0, Math.min(audio.duration, audio.currentTime + seconds));
   };
 
-  const currentTurn = transcript[currentTurnIndex];
-  const progress = transcript.length > 0 ? ((currentTurnIndex + 1) / transcript.length) * 100 : 0;
+  const formatTime = (seconds: number): string => {
+    if (isNaN(seconds) || !isFinite(seconds)) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   return (
     <div className="conversation-player">
       <div className="player-header">
-        <h3>🎙️ Conversation Playback</h3>
+        <h3>🎙️ Conversation Recording</h3>
         <div className="conversation-id">ID: {conversationId}</div>
       </div>
 
-      {recordingUrl && (
-        <div className="audio-player">
+      {audioUrl ? (
+        <div className="audio-player-container">
+          {isBuffering && (
+            <div className="buffering-status">
+              <div className="buffering-spinner"></div>
+              <p>Waiting for audio to be ready...</p>
+              <p className="buffering-hint">Recording is still in progress. Audio will start playing once it's available.</p>
+            </div>
+          )}
+          
           <audio
-            src={recordingUrl}
-            controls
-            className="audio-control"
+            ref={audioRef}
+            src={audioUrl}
+            preload="metadata"
           />
-          <p className="audio-hint">🎧 Full conversation recording</p>
-        </div>
-      )}
 
-      {transcript.length > 0 && (
-        <>
-          <div className="transcript-viewer">
-            <div className="current-turn">
-              {currentTurn && (
-                <>
-                  <div className={`speaker ${currentTurn.speaker.toLowerCase()}`}>
-                    {currentTurn.speaker === 'Dispatcher' ? '👔' : '🚚'} {currentTurn.speaker}
-                  </div>
-                  <div className="turn-text">{currentTurn.text}</div>
-                  <div className="turn-timestamp">
-                    {new Date(currentTurn.timestamp).toLocaleTimeString()}
-                  </div>
-                </>
-              )}
-            </div>
+          {!isBuffering && (
+          <div className="audio-player-custom">
+            <div className="player-main">
+              <button
+                onClick={togglePlayPause}
+                className="play-button"
+                title={isPlaying ? 'Pause' : 'Play'}
+              >
+                {isPlaying ? '⏸' : '▶️'}
+              </button>
 
-            <div className="progress-bar">
-              <div
-                className="progress-fill"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <div className="progress-text">
-              Turn {currentTurnIndex + 1} of {transcript.length}
-            </div>
-          </div>
+              <div className="time-display">{formatTime(currentTime)}</div>
 
-          <div className="player-controls">
-            <button
-              onClick={handlePrevious}
-              disabled={currentTurnIndex === 0}
-              className="control-btn"
-              title="Previous turn"
-            >
-              ⏮ Previous
-            </button>
-
-            <button
-              onClick={handlePlayPause}
-              className="control-btn play-btn"
-              title={isPlaying ? 'Pause' : 'Play'}
-            >
-              {isPlaying ? '⏸ Pause' : '▶️ Play'}
-            </button>
-
-            <button
-              onClick={handleNext}
-              disabled={currentTurnIndex === transcript.length - 1}
-              className="control-btn"
-              title="Next turn"
-            >
-              Next ⏭
-            </button>
-
-            <button
-              onClick={handleReset}
-              className="control-btn"
-              title="Reset to beginning"
-            >
-              🔄 Reset
-            </button>
-          </div>
-
-          <div className="speed-control">
-            <label>Playback Speed: </label>
-            <select
-              value={playbackSpeed}
-              onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
-              className="speed-select"
-            >
-              <option value={0.75}>0.75x</option>
-              <option value={1}>1x (Normal)</option>
-              <option value={1.25}>1.25x</option>
-              <option value={1.5}>1.5x</option>
-              <option value={2}>2x</option>
-            </select>
-          </div>
-
-          <div className="transcript-list">
-            <h4>📋 Full Transcript</h4>
-            <div className="transcript-scroll">
-              {transcript.map((turn, idx) => (
+              <div className="seek-bar-container">
+                <input
+                  type="range"
+                  min="0"
+                  max={duration || 0}
+                  value={currentTime}
+                  onChange={handleSeek}
+                  className="seek-bar"
+                />
                 <div
-                  key={idx}
-                  className={`transcript-turn ${
-                    idx === currentTurnIndex ? 'active' : ''
-                  }`}
-                  onClick={() => {
-                    setCurrentTurnIndex(idx);
-                    setIsPlaying(false);
-                  }}
-                >
-                  <div className="turn-number">{idx + 1}</div>
-                  <div className="turn-speaker">
-                    {turn.speaker === 'Dispatcher' ? '👔' : '🚚'}
-                  </div>
-                  <div className="turn-content">
-                    <strong>{turn.speaker}:</strong>
-                    <p>{turn.text.substring(0, 60)}...</p>
-                  </div>
-                </div>
-              ))}
+                  className="seek-progress"
+                  style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
+                />
+              </div>
+
+              <div className="time-display">{formatTime(duration)}</div>
+            </div>
+
+            <div className="player-controls">
+              <button
+                onClick={() => skip(-10)}
+                className="control-btn"
+                title="Rewind 10 seconds"
+              >
+                ⏪ -10s
+              </button>
+
+              <button
+                onClick={() => skip(10)}
+                className="control-btn"
+                title="Forward 10 seconds"
+              >
+                +10s ⏩
+              </button>
+
+              <div className="volume-control">
+                <span className="volume-icon">
+                  {volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}
+                </span>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={volume}
+                  onChange={handleVolumeChange}
+                  className="volume-slider"
+                />
+              </div>
+            </div>
+
+            <div className="player-info">
+              <p className="audio-hint">🎧 Full conversation audio recording in high quality</p>
             </div>
           </div>
-        </>
-      )}
-
-      {transcript.length === 0 && !recordingUrl && (
-        <div className="no-content">
-          <p>No conversation recording available yet</p>
-          <p className="hint">The conversation will appear here once it completes</p>
+          )}
+        </div>
+      ) : (
+        <div className="no-audio">
+          <div className="loading-spinner"></div>
+          <p>⏳ Processing audio recording...</p>
+          <p className="hint">The audio will be available shortly after the conversation completes</p>
         </div>
       )}
     </div>
