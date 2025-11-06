@@ -144,7 +144,6 @@ async def entrypoint(ctx: JobContext):
             conversation_context = await shared_state.format_conversation_context()
             
             # Create fresh driver agent instance with current conversation context
-            from driver_agent import DriverAgent
             updated_driver_agent = DriverAgent(
                 custom_prompt=custom_driver_prompt,
                 context=custom_driver_context,
@@ -179,7 +178,6 @@ async def entrypoint(ctx: JobContext):
             conversation_context = await shared_state.format_conversation_context()
             
             # Create fresh dispatcher agent instance with current conversation context
-            from dispatcher_agent import DispatcherAgent
             updated_dispatcher_agent = DispatcherAgent(
                 custom_prompt=custom_dispatcher_prompt,
                 context=custom_dispatcher_context,
