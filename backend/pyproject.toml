@@ -12,6 +12,7 @@ dependencies = [
     "livekit-agents[openai,silero]>=1.2.0",
     "openai>=1.10.0",
     "python-dotenv>=1.0.0",
+    "python-multipart>=0.0.20",
 ]
 
 [build-system]

@@ -1,5 +1,6 @@
 """Room management API routes for LiveKit."""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional
 import os
@@ -10,9 +11,16 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 # Load environment variables from .env file in backend directory
+# Path: backend/src/api/routes/rooms.py
+# Parent dirs: routes -> api -> src -> backend
+# We need 4 levels up: rooms.py -> routes/ -> api/ -> src/ -> backend/
 backend_dir = Path(__file__).parent.parent.parent.parent
 env_file = backend_dir / ".env"
 load_dotenv(dotenv_path=env_file)
+
+print(f"[INIT] rooms.py loaded from: {Path(__file__)}")
+print(f"[INIT] Backend directory: {backend_dir}")
+print(f"[INIT] Recordings directory will be: {backend_dir / 'recordings'}")
 
 router = APIRouter(prefix="/api/v1/rooms", tags=["rooms"])
 
@@ -253,6 +261,95 @@ async def dispatch_agents(room_name: str):
         }
 
 
+@router.get("/{room_name}/transcript")
+async def get_transcript(room_name: str):
+    """
+    Get the conversation transcript for a completed conversation.
+    
+    This retrieves the saved JSON file with all conversation messages.
+    """
+    try:
+        # Recordings directory inside backend
+        recordings_dir = backend_dir / "recordings"
+        
+        print(f"\n[TRANSCRIPT] Searching for room: {room_name}")
+        print(f"[TRANSCRIPT] Directory: {recordings_dir}")
+        
+        if not recordings_dir.exists():
+            print(f"[TRANSCRIPT] ✗ Directory does not exist")
+            return {
+                "roomName": room_name,
+                "hasTranscript": False,
+                "message": f"Recordings directory not found: {recordings_dir}"
+            }
+        
+        # List all files in this directory
+        all_files = list(recordings_dir.glob("*.json"))
+        print(f"[TRANSCRIPT] ✓ Found {len(all_files)} files")
+        
+        # Find the most recent file for this room
+        matching_files = list(recordings_dir.glob(f"{room_name}_*.json"))
+        if not matching_files:
+            matching_files = [f for f in all_files if room_name in f.name]
+        
+        if not matching_files:
+            print(f"[TRANSCRIPT] ✗ No files found for room {room_name}\n")
+            return {
+                "roomName": room_name,
+                "hasTranscript": False,
+                "message": f"No transcript found for room {room_name}"
+            }
+        
+        # Get the most recent file
+        latest_file = max(matching_files, key=lambda p: p.stat().st_mtime)
+        print(f"[TRANSCRIPT] ✓ Using file: {latest_file.name}")
+        
+        # Read and return the transcript
+        with open(latest_file, 'r') as f:
+            transcript_data = json.load(f)
+        
+        messages = transcript_data.get("messages", [])
+        print(f"[TRANSCRIPT] ✓ Loaded {len(messages)} messages")
+        
+        # Convert messages to UI format
+        turns = []
+        for idx, msg in enumerate(messages):
+            # Determine speaker name
+            speaker = msg["speaker"]
+            if "dispatcher" in speaker.lower() or "tim" in speaker.lower():
+                display_speaker = "Dispatcher"
+            elif "driver" in speaker.lower() or "chris" in speaker.lower():
+                display_speaker = "Driver"
+            else:
+                display_speaker = speaker
+            
+            turns.append({
+                "speaker": display_speaker,
+                "text": msg["message"],
+                "timestamp": transcript_data.get("timestamp", "")
+            })
+            print(f"[TRANSCRIPT]   {idx + 1}. {display_speaker}: {msg['message'][:50]}")
+        
+        print(f"[TRANSCRIPT] ✓ Returning {len(turns)} turns\n")
+        
+        return {
+            "roomName": room_name,
+            "hasTranscript": True,
+            "timestamp": transcript_data.get("timestamp"),
+            "messageCount": len(turns),
+            "turns": turns
+        }
+    
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"[ERROR] Error getting transcript:\n{error_details}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get transcript: {str(e)}"
+        )
+
+
 @router.get("/{room_name}/recording")
 async def get_recording(room_name: str):
     """
@@ -317,4 +414,107 @@ async def get_recording(room_name: str):
         raise HTTPException(
             status_code=500,
             detail=f"Failed to get recording: {str(e)}"
+        )
+
+
+@router.post("/{room_name}/upload-audio")
+async def upload_audio(room_name: str, audio: UploadFile = File(...)):
+    """
+    Upload audio recording for a completed conversation.
+    
+    This endpoint receives the MP3 audio file recorded by the frontend
+    and saves it to the recordings/audio directory.
+    """
+    try:
+        # Create audio recordings directory if it doesn't exist
+        audio_dir = backend_dir / "recordings" / "audio"
+        audio_dir.mkdir(parents=True, exist_ok=True)
+        
+        print(f"\n[AUDIO UPLOAD] Receiving audio for room: {room_name}")
+        print(f"[AUDIO UPLOAD] File: {audio.filename}, Type: {audio.content_type}")
+        
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{room_name}_{timestamp}.mp3"
+        filepath = audio_dir / filename
+        
+        # Save the uploaded file
+        content = await audio.read()
+        file_size_mb = len(content) / (1024 * 1024)
+        
+        with open(filepath, "wb") as f:
+            f.write(content)
+        
+        print(f"[AUDIO UPLOAD] ✓ Saved {file_size_mb:.2f}MB to {filepath}")
+        
+        return {
+            "success": True,
+            "roomName": room_name,
+            "filename": filename,
+            "fileSize": f"{file_size_mb:.2f}MB",
+            "filepath": str(filepath)
+        }
+    
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"[ERROR] Error uploading audio:\n{error_details}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to upload audio: {str(e)}"
+        )
+
+
+@router.get("/{room_name}/audio")
+async def get_audio(room_name: str):
+    """
+    Get audio recording file for a completed conversation.
+    
+    Returns the MP3 audio file that was uploaded after the conversation.
+    """
+    try:
+        audio_dir = backend_dir / "recordings" / "audio"
+        
+        print(f"\n[AUDIO FETCH] Searching for audio: {room_name}")
+        print(f"[AUDIO FETCH] Directory: {audio_dir}")
+        
+        if not audio_dir.exists():
+            print(f"[AUDIO FETCH] ✗ Directory does not exist")
+            raise HTTPException(
+                status_code=404,
+                detail="Audio recordings directory not found"
+            )
+        
+        # Find the most recent audio file for this room
+        matching_files = list(audio_dir.glob(f"{room_name}_*.mp3"))
+        
+        if not matching_files:
+            print(f"[AUDIO FETCH] ✗ No audio file found for room {room_name}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"No audio recording found for room {room_name}"
+            )
+        
+        # Get the most recent file
+        latest_file = max(matching_files, key=lambda p: p.stat().st_mtime)
+        file_size_mb = latest_file.stat().st_size / (1024 * 1024)
+        
+        print(f"[AUDIO FETCH] ✓ Found: {latest_file.name} ({file_size_mb:.2f}MB)")
+        
+        # Return the file
+        return FileResponse(
+            path=str(latest_file),
+            media_type="audio/mpeg",
+            filename=latest_file.name
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"[ERROR] Error fetching audio:\n{error_details}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get audio: {str(e)}"
         )
