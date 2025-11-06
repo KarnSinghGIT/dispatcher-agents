@@ -21,7 +21,7 @@ export const AgentConfigForm: React.FC<AgentConfigFormProps> = ({ agent, label, 
         <label htmlFor={`${agent.role}-prompt`}>Agent Prompt</label>
         <textarea
           id={`${agent.role}-prompt`}
-          rows={6}
+          rows={15}
           value={agent.prompt}
           onChange={(e) => handleChange('prompt', e.target.value)}
           placeholder={`Enter the prompt for the ${agent.role} agent...`}
