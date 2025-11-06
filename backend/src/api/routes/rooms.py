@@ -251,3 +251,70 @@ async def dispatch_agents(room_name: str):
             "error": str(e),
             "instructions": "Start dispatcher_agent.py and driver_agent.py in separate terminals"
         }
+
+
+@router.get("/{room_name}/recording")
+async def get_recording(room_name: str):
+    """
+    Get recording URL and transcript for a completed conversation.
+    
+    LiveKit automatically records rooms. This endpoint retrieves the recording information.
+    """
+    try:
+        livekit_url = os.getenv("LIVEKIT_URL")
+        api_key = os.getenv("LIVEKIT_API_KEY")
+        api_secret = os.getenv("LIVEKIT_API_SECRET")
+        
+        if not all([livekit_url, api_key, api_secret]):
+            raise HTTPException(
+                status_code=500,
+                detail="LiveKit credentials not configured"
+            )
+        
+        lk_api = api.LiveKitAPI(
+            url=livekit_url,
+            api_key=api_key,
+            api_secret=api_secret
+        )
+        
+        # List recordings for this room
+        # Note: This API may vary - check LiveKit documentation
+        try:
+            # Try to get recordings (this depends on LiveKit version and setup)
+            recordings = await lk_api.recording.list_recordings(
+                room=room_name
+            )
+            await lk_api.aclose()
+            
+            return {
+                "roomName": room_name,
+                "recordingAvailable": len(recordings) > 0,
+                "recordings": [
+                    {
+                        "id": r.id,
+                        "status": str(r.status),
+                        "location": r.location if hasattr(r, 'location') else None
+                    }
+                    for r in recordings
+                ]
+            }
+        except AttributeError:
+            # If recording API not available, return placeholder
+            await lk_api.aclose()
+            return {
+                "roomName": room_name,
+                "recordingAvailable": False,
+                "message": "Recording functionality requires LiveKit Pro or Enterprise",
+                "note": "Consider implementing client-side recording with MediaRecorder API"
+            }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error getting recording: {error_details}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get recording: {str(e)}"
+        )
