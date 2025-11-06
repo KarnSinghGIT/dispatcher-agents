@@ -105,12 +105,22 @@ async def create_room(request: CreateRoomRequest):
         )
         
         # Prepare metadata as JSON string
+        print(f"\n[ROOMS API] Creating room with metadata:")
+        print(f"  Request scenario: {request.scenario}")
+        print(f"  Request dispatcherAgent: {request.dispatcherAgent}")
+        print(f"  Request driverAgent: {request.driverAgent}")
+        
         metadata_dict = {
             "scenario": request.scenario.model_dump(),
             "dispatcherAgent": request.dispatcherAgent.model_dump(),
             "driverAgent": request.driverAgent.model_dump()
         }
         metadata_json = json.dumps(metadata_dict)
+        
+        print(f"  Metadata dict: {metadata_dict}")
+        print(f"  Metadata JSON length: {len(metadata_json)} bytes")
+        print(f"  Dispatcher config: {metadata_dict.get('dispatcherAgent')}")
+        print(f"  Driver config: {metadata_dict.get('driverAgent')}")
         
         # Create the room
         room = await lk_api.room.create_room(
@@ -121,6 +131,9 @@ async def create_room(request: CreateRoomRequest):
                 metadata=metadata_json
             )
         )
+        
+        print(f"  Room created with metadata length: {len(room.metadata) if room.metadata else 0} bytes")
+        print(f"  Room metadata: {room.metadata[:200] if room.metadata else 'EMPTY'}")
         
         # Generate token for frontend (observer role)
         token = api.AccessToken(api_key, api_secret)
