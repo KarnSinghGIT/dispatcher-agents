@@ -31,6 +31,11 @@ export const getRecording = async (roomName: string) => {
   return response.data;
 };
 
+export const getTranscript = async (roomName: string) => {
+  const response = await api.get(`/api/v1/rooms/${roomName}/transcript`);
+  return response.data;
+};
+
 export const checkConversationStatus = async (roomName: string) => {
   try {
     const status = await getRoomStatus(roomName);
@@ -46,5 +51,26 @@ export const checkConversationStatus = async (roomName: string) => {
       error: error instanceof Error ? error.message : 'Unknown error'
     };
   }
+};
+
+export const uploadAudio = async (roomName: string, audioBlob: Blob) => {
+  const formData = new FormData();
+  formData.append('audio', audioBlob, `${roomName}.mp3`);
+  
+  const response = await api.post(
+    `/api/v1/rooms/${roomName}/upload-audio`,
+    formData,
+    {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 120000, // 2 minutes for large files
+    }
+  );
+  return response.data;
+};
+
+export const getAudioUrl = (roomName: string): string => {
+  return `${API_BASE_URL}/api/v1/rooms/${roomName}/audio`;
 };
 
