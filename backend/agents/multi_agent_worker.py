@@ -111,6 +111,8 @@ async def entrypoint(ctx: JobContext):
     try:
         await dispatcher_session.generate_reply()
         logger.info("✓ Dispatcher spoke successfully")
+        # Capture dispatcher's initial greeting
+        await shared_state.add_message("Tim (Dispatcher)", "Initiated greeting")
     except Exception as e:
         logger.error(f"❌ Dispatcher failed to speak: {e}")
         import traceback
@@ -138,8 +140,24 @@ async def entrypoint(ctx: JobContext):
         # Driver responds
         logger.info(f"Turn {turn_count + 1}: Driver generating response...")
         try:
+            # Get conversation context for driver awareness
+            conversation_context = await shared_state.format_conversation_context()
+            
+            # Create fresh driver agent instance with current conversation context
+            from driver_agent import DriverAgent
+            updated_driver_agent = DriverAgent(
+                custom_prompt=custom_driver_prompt,
+                context=custom_driver_context,
+                conversation_context=conversation_context
+            )
+            
+            # Update the session with new agent instance
+            driver_session._agent = updated_driver_agent
+            
             await driver_session.generate_reply()
             logger.info(f"✓ Driver spoke")
+            # Capture driver response
+            await shared_state.add_message("Chris (Driver)", "Responded to dispatcher")
             turn_count += 1
         except Exception as e:
             logger.error(f"❌ Driver response error: {e}")
@@ -157,8 +175,24 @@ async def entrypoint(ctx: JobContext):
         # Dispatcher responds
         logger.info(f"Turn {turn_count + 1}: Dispatcher generating response...")
         try:
+            # Get conversation context for dispatcher awareness
+            conversation_context = await shared_state.format_conversation_context()
+            
+            # Create fresh dispatcher agent instance with current conversation context
+            from dispatcher_agent import DispatcherAgent
+            updated_dispatcher_agent = DispatcherAgent(
+                custom_prompt=custom_dispatcher_prompt,
+                context=custom_dispatcher_context,
+                conversation_context=conversation_context
+            )
+            
+            # Update the session with new agent instance
+            dispatcher_session._agent = updated_dispatcher_agent
+            
             await dispatcher_session.generate_reply()
             logger.info(f"✓ Dispatcher spoke")
+            # Capture dispatcher response
+            await shared_state.add_message("Tim (Dispatcher)", "Responded to driver")
             turn_count += 1
         except Exception as e:
             logger.error(f"❌ Dispatcher response error: {e}")

@@ -24,7 +24,7 @@ logger.setLevel(logging.INFO)
 class DispatcherAgent(Agent):
     """Tim - The Dispatcher Agent"""
     
-    def __init__(self, custom_prompt: str = None, context: str = None) -> None:
+    def __init__(self, custom_prompt: str = None, context: str = None, conversation_context: str = "") -> None:
         # Use custom prompt from UI if provided, otherwise use default
         if custom_prompt:
             base_instructions = custom_prompt
@@ -35,16 +35,26 @@ You are calling a driver named Chris about a load opportunity.
 Your goal is to:
 1. Greet Chris warmly
 2. Present the load details clearly
-3. Answer any questions he has
+3. Answer any questions he has - LISTEN CAREFULLY to what Chris asks
 4. Get his commitment to take the load
 5. Provide next steps
 
-Be conversational, professional, and efficient. Keep responses natural and brief.
-Wait for responses before continuing."""
+CRITICAL INSTRUCTIONS:
+- Listen carefully to everything Chris says
+- If Chris asks a question, ALWAYS answer it directly
+- If Chris has concerns, address those concerns before moving forward
+- Don't rush to book the load - first understand if Chris is interested
+- Reference previous parts of the conversation if relevant
+- Keep responses natural and brief
+- Wait for responses before continuing"""
         
         # Add context if provided
         if context:
             base_instructions += f"\n\nContext: {context}"
+        
+        # Add conversation history for context awareness
+        if conversation_context:
+            base_instructions += f"\n\nConversation so far:\n{conversation_context}"
         
         base_instructions += """
 
