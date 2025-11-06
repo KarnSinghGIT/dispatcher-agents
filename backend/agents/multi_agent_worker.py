@@ -2,6 +2,7 @@
 Multi-Agent Worker - Runs both Dispatcher and Driver agents in the same room.
 
 This worker manages both agents in a single process to ensure they both join the same room.
+The agents use tool calling to detect when the conversation is complete and automatically disconnect.
 """
 
 import asyncio
@@ -10,9 +11,11 @@ from livekit import rtc
 from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli
 from livekit.plugins import openai, silero
 from typing import Dict, Any
+import json
 
 from dispatcher_agent import DispatcherAgent
 from driver_agent import DriverAgent
+from conversation_state import get_shared_state
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -22,19 +25,24 @@ logger = logging.getLogger(__name__)
 async def entrypoint(ctx: JobContext):
     """
     Multi-agent entrypoint that runs both dispatcher and driver agents in the same room.
+    Uses tool calling for agents to signal conversation completion and auto-disconnect.
     """
     logger.info(f"=== MULTI-AGENT WORKER STARTING ===")
     logger.info(f"Room: {ctx.room.name}")
     
     # Get room metadata
     room_metadata = ctx.room.metadata
+    dispatcher_config = {}
+    driver_config = {}
+    
     if room_metadata:
         try:
-            import json
             metadata = json.loads(room_metadata)
             logger.info(f"Room metadata: {metadata.get('scenario', {}).get('loadId', 'unknown')}")
-        except:
-            pass
+            dispatcher_config = metadata.get("dispatcherAgent", {})
+            driver_config = metadata.get("driverAgent", {})
+        except Exception as e:
+            logger.warning(f"Could not parse room metadata: {e}")
     
     # Create two separate agent sessions
     # Session 1: Dispatcher Agent
@@ -44,7 +52,6 @@ async def entrypoint(ctx: JobContext):
             voice="alloy",
             temperature=0.8,
         ),
-        # vad=silero.VAD.load(),  # Uncomment if VAD is needed
     )
     
     # Session 2: Driver Agent
@@ -54,19 +61,36 @@ async def entrypoint(ctx: JobContext):
             voice="echo",
             temperature=0.7,
         ),
-        # vad=silero.VAD.load(),  # Uncomment if VAD is needed
     )
     
     logger.info("Starting both agent sessions...")
     
+    # Get custom prompts if available
+    custom_dispatcher_prompt = dispatcher_config.get("prompt")
+    custom_dispatcher_context = dispatcher_config.get("actingNotes")
+    custom_driver_prompt = driver_config.get("prompt")
+    custom_driver_context = driver_config.get("actingNotes")
+    
     # Start dispatcher session
     logger.info("Starting dispatcher session...")
-    await dispatcher_session.start(room=ctx.room, agent=DispatcherAgent())
+    await dispatcher_session.start(
+        room=ctx.room, 
+        agent=DispatcherAgent(
+            custom_prompt=custom_dispatcher_prompt,
+            context=custom_dispatcher_context
+        )
+    )
     logger.info("✓ Dispatcher agent session started")
     
     # Start driver session
     logger.info("Starting driver session...")
-    await driver_session.start(room=ctx.room, agent=DriverAgent())
+    await driver_session.start(
+        room=ctx.room, 
+        agent=DriverAgent(
+            custom_prompt=custom_driver_prompt,
+            context=custom_driver_context
+        )
+    )
     logger.info("✓ Driver agent session started")
     
     # Log current participants
@@ -77,33 +101,83 @@ async def entrypoint(ctx: JobContext):
     
     logger.info("Multi-agent worker ready - both agents active and listening")
     
-    # Keep both agents responding in a loop
-    logger.info("Starting continuous conversation loop...")
+    # Reset shared state for this new conversation
+    shared_state = get_shared_state()
+    await shared_state.reset()
+    logger.info("✓ Conversation state reset for new conversation")
     
     # Dispatcher initiates the first reply
     logger.info("Dispatcher initiating conversation...")
-    await dispatcher_session.generate_reply()
-    
-    # Now both agents will automatically respond to each other
-    # Keep the sessions active by continuously generating replies
-    max_turns = 20  # Prevent infinite loops, allow up to 20 exchanges
-    turn_count = 0
-    
-    while turn_count < max_turns:
-        # Driver responds to dispatcher
-        logger.info(f"Turn {turn_count + 1}: Driver generating response...")
-        await driver_session.generate_reply()
-        turn_count += 1
-        
-        if turn_count >= max_turns:
-            break
-            
-        # Dispatcher responds to driver
-        logger.info(f"Turn {turn_count + 1}: Dispatcher generating response...")
+    try:
         await dispatcher_session.generate_reply()
-        turn_count += 1
+        logger.info("✓ Dispatcher spoke successfully")
+    except Exception as e:
+        logger.error(f"❌ Dispatcher failed to speak: {e}")
+        import traceback
+        traceback.print_exc()
+        return
     
-    logger.info("Conversation completed - agents finished exchanging")
+    logger.info("Starting natural conversation flow - agents will conclude when ready...")
+    
+    # shared_state already initialized above
+    turn_count = 0
+    max_duration_seconds = 600  # 10 minute safety timeout
+    start_time = asyncio.get_event_loop().time()
+    
+    # Keep agents conversing naturally until they decide to end
+    while not await shared_state.is_concluded():
+        # Check safety timeout
+        elapsed = asyncio.get_event_loop().time() - start_time
+        if elapsed > max_duration_seconds:
+            logger.warning(f"⚠️ Conversation reached safety timeout ({max_duration_seconds}s)")
+            break
+        
+        # Wait a bit for response processing
+        await asyncio.sleep(2)
+        
+        # Driver responds
+        logger.info(f"Turn {turn_count + 1}: Driver generating response...")
+        try:
+            await driver_session.generate_reply()
+            logger.info(f"✓ Driver spoke")
+            turn_count += 1
+        except Exception as e:
+            logger.error(f"❌ Driver response error: {e}")
+            import traceback
+            traceback.print_exc()
+            break
+        
+        # Check if agents concluded
+        if await shared_state.is_concluded():
+            logger.info("✓ Agent signaled conversation conclusion")
+            break
+        
+        await asyncio.sleep(2)
+        
+        # Dispatcher responds
+        logger.info(f"Turn {turn_count + 1}: Dispatcher generating response...")
+        try:
+            await dispatcher_session.generate_reply()
+            logger.info(f"✓ Dispatcher spoke")
+            turn_count += 1
+        except Exception as e:
+            logger.error(f"❌ Dispatcher response error: {e}")
+            import traceback
+            traceback.print_exc()
+            break
+        
+        # Check if agents concluded
+        if await shared_state.is_concluded():
+            logger.info("✓ Agent signaled conversation conclusion")
+            break
+        
+        # Log progress every 10 turns
+        if turn_count % 10 == 0:
+            logger.info(f"📊 Conversation ongoing... {turn_count} turns so far")
+    
+    elapsed_time = asyncio.get_event_loop().time() - start_time
+    logger.info(f"✅ Conversation completed: {turn_count} turns in {elapsed_time:.1f}s")
+    logger.info("Multi-agent worker conversation complete")
 
 
 if __name__ == "__main__":
