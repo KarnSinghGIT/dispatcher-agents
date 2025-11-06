@@ -25,9 +25,16 @@ class DriverAgent(Agent):
     """Chris - The Driver Agent"""
     
     def __init__(self, custom_prompt: str = None, context: str = None, conversation_context: str = "") -> None:
+        logger.info(f"=== DRIVER AGENT INIT ===")
+        logger.info(f"custom_prompt type: {type(custom_prompt)}")
+        logger.info(f"custom_prompt value: {repr(custom_prompt)[:100] if custom_prompt else 'None'}")
+        logger.info(f"custom_prompt truthy: {bool(custom_prompt)}")
+        logger.info(f"context: {repr(context)[:50] if context else 'None'}")
+        
         # Use custom prompt from UI if provided, otherwise use default
         if custom_prompt:
             base_instructions = custom_prompt
+            logger.info(f"✓ USING CUSTOM PROMPT (length: {len(custom_prompt)})")
         else:
             base_instructions = """You are Chris, an experienced truck driver who is currently on the road.
 A dispatcher named Tim from Dispatch Co is calling you about a load opportunity.
@@ -66,6 +73,9 @@ Once you have the details and they sound good, agree to take the load."""
         base_instructions += """
 
 When the conversation is complete (you've either accepted or rejected the load and there's nothing more to discuss), call the end_conversation tool."""
+        
+        logger.info(f"Final instructions length: {len(base_instructions)} chars")
+        logger.info(f"First 150 chars: {base_instructions[:150]}")
         
         super().__init__(
             instructions=base_instructions

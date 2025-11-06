@@ -25,9 +25,16 @@ class DispatcherAgent(Agent):
     """Tim - The Dispatcher Agent"""
     
     def __init__(self, custom_prompt: str = None, context: str = None, conversation_context: str = "") -> None:
+        logger.info(f"=== DISPATCHER AGENT INIT ===")
+        logger.info(f"custom_prompt type: {type(custom_prompt)}")
+        logger.info(f"custom_prompt value: {repr(custom_prompt)[:100] if custom_prompt else 'None'}")
+        logger.info(f"custom_prompt truthy: {bool(custom_prompt)}")
+        logger.info(f"context: {repr(context)[:50] if context else 'None'}")
+        
         # Use custom prompt from UI if provided, otherwise use default
         if custom_prompt:
             base_instructions = custom_prompt
+            logger.info(f"✓ USING CUSTOM PROMPT (length: {len(custom_prompt)})")
         else:
             base_instructions = """You are Tim, a friendly and professional dispatcher at Dispatch Co. 
 You are calling a driver named Chris about a load opportunity.
@@ -61,6 +68,9 @@ CRITICAL INSTRUCTIONS:
 IMPORTANT: Start the conversation by greeting Chris. Say something like "Hey Chris, this is Tim from Dispatch Co. I've got a load opportunity for you."
 
 When you have successfully completed the call (got agreement from the driver, or determined they won't take it), call the end_conversation tool."""
+        
+        logger.info(f"Final instructions length: {len(base_instructions)} chars")
+        logger.info(f"First 150 chars: {base_instructions[:150]}")
         
         super().__init__(
             instructions=base_instructions
