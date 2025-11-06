@@ -209,6 +209,14 @@ async def entrypoint(ctx: JobContext):
     
     elapsed_time = asyncio.get_event_loop().time() - start_time
     logger.info(f"✅ Conversation completed: {turn_count} turns in {elapsed_time:.1f}s")
+    
+    # Save conversation to file for later retrieval
+    try:
+        conversation_file = await shared_state.save_conversation_to_file(ctx.room.name)
+        logger.info(f"✓ Conversation saved: {conversation_file}")
+    except Exception as e:
+        logger.warning(f"⚠️ Could not save conversation: {e}")
+    
     logger.info("Multi-agent worker conversation complete")
 
 

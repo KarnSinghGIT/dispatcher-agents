@@ -129,6 +129,42 @@ class ConversationState:
             "has_room": self._state["room"] is not None,
             "message_count": len(self._state["messages"])
         }
+    
+    async def save_conversation_to_file(self, room_name: str) -> str:
+        """Save conversation history to a file and return the path."""
+        from pathlib import Path
+        import json
+        from datetime import datetime
+        
+        async with self._state.get("lock", asyncio.Lock()):
+            messages = self._state["messages"].copy()
+        
+        # Create recordings directory if it doesn't exist
+        # Path: backend/agents/conversation_state.py
+        # Parent dirs: agents -> backend
+        recordings_dir = Path(__file__).parent.parent / "recordings"
+        recordings_dir.mkdir(exist_ok=True)
+        
+        logger.info(f"[DEBUG] Recordings directory: {recordings_dir}")
+        
+        # Create filename with room name and timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{room_name}_{timestamp}.json"
+        filepath = recordings_dir / filename
+        
+        # Save conversation data
+        conversation_data = {
+            "room_name": room_name,
+            "timestamp": datetime.now().isoformat(),
+            "message_count": len(messages),
+            "messages": messages
+        }
+        
+        with open(filepath, 'w') as f:
+            json.dump(conversation_data, f, indent=2)
+        
+        logger.info(f"✓ Conversation saved to {filepath}")
+        return str(filepath)
 
 
 # Global shared state instance
