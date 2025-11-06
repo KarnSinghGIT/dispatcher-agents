@@ -30,22 +30,150 @@ async def entrypoint(ctx: JobContext):
     logger.info(f"=== MULTI-AGENT WORKER STARTING ===")
     logger.info(f"Room: {ctx.room.name}")
     
-    # Get room metadata
+    # Get room metadata - with retry for race condition
     room_metadata = ctx.room.metadata
     dispatcher_config = {}
     driver_config = {}
     
+    logger.info(f"=== CHECKING ROOM METADATA ===")
+    logger.info(f"Initial metadata length: {len(room_metadata) if room_metadata else 0} bytes")
+    
+    # CRITICAL FIX: If metadata is empty, fetch room details from LiveKit API
+    # This handles the race condition where worker joins before metadata is propagated
+    if not room_metadata or len(room_metadata) == 0:
+        logger.info("⚠️ Metadata empty on initial join, fetching from LiveKit API...")
+        try:
+            import os
+            from livekit import api as livekit_api
+            from dotenv import load_dotenv
+            from pathlib import Path
+            import asyncio
+            
+            # Load env
+            backend_dir = Path(__file__).parent.parent
+            env_file = backend_dir / ".env"
+            load_dotenv(dotenv_path=env_file, override=True)
+            
+            livekit_url = os.getenv("LIVEKIT_URL")
+            api_key = os.getenv("LIVEKIT_API_KEY")
+            api_secret = os.getenv("LIVEKIT_API_SECRET")
+            
+            if all([livekit_url, api_key, api_secret]):
+                lk_api = livekit_api.LiveKitAPI(
+                    url=livekit_url,
+                    api_key=api_key,
+                    api_secret=api_secret
+                )
+                
+                # Retry loop - sometimes metadata takes a moment to propagate
+                max_retries = 5
+                retry_delay = 0.5  # seconds
+                
+                for attempt in range(max_retries):
+                    logger.info(f"Fetching rooms (attempt {attempt + 1}/{max_retries})...")
+                    
+                    # Fetch room details
+                    rooms_response = await lk_api.room.list_rooms(livekit_api.ListRoomsRequest())
+                    
+                    logger.info(f"Found {len(rooms_response.rooms)} rooms")
+                    
+                    # Access the rooms attribute of the response
+                    room_found = False
+                    for room in rooms_response.rooms:
+                        logger.info(f"  Room: {room.name}, metadata length: {len(room.metadata) if room.metadata else 0}")
+                        if room.name == ctx.room.name:
+                            room_found = True
+                            if room.metadata and len(room.metadata) > 0:
+                                room_metadata = room.metadata
+                                logger.info(f"✓ Fetched metadata from API: {len(room_metadata)} bytes")
+                                break
+                            else:
+                                logger.info(f"  Room found but metadata still empty, will retry...")
+                    
+                    if room_metadata and len(room_metadata) > 0:
+                        break  # Got metadata, exit retry loop
+                    
+                    if not room_found:
+                        logger.warning(f"  Room {ctx.room.name} not found in list yet")
+                    
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(retry_delay)
+                
+                await lk_api.aclose()
+        except Exception as e:
+            logger.warning(f"Could not fetch room metadata from API: {e}")
+            import traceback
+            logger.warning(traceback.format_exc())
+    
+    logger.info(f"Final metadata length: {len(room_metadata) if room_metadata else 0} bytes")
+    
     if room_metadata:
         try:
             metadata = json.loads(room_metadata)
+            logger.info(f"✓ Metadata parsed successfully")
             logger.info(f"Room metadata: {metadata.get('scenario', {}).get('loadId', 'unknown')}")
+            
             dispatcher_config = metadata.get("dispatcherAgent", {})
             driver_config = metadata.get("driverAgent", {})
+            
+            logger.info(f"Dispatcher config keys: {list(dispatcher_config.keys())}")
+            logger.info(f"Driver config keys: {list(driver_config.keys())}")
         except Exception as e:
             logger.warning(f"Could not parse room metadata: {e}")
     
-    # Create two separate agent sessions
-    # Session 1: Dispatcher Agent
+    # Note: Sessions are created first, then we'll set instructions after agent creation
+    # This is a placeholder that will be updated once we have the agent instructions
+    
+    logger.info("Starting both agent sessions...")
+    
+    # Get custom prompts if available
+    logger.info(f"=== EXTRACTING PROMPTS FROM CONFIG ===")
+    logger.info(f"dispatcher_config type: {type(dispatcher_config)}")
+    logger.info(f"dispatcher_config content: {dispatcher_config}")
+    logger.info(f"driver_config type: {type(driver_config)}")
+    logger.info(f"driver_config content: {driver_config}")
+    
+    custom_dispatcher_prompt = dispatcher_config.get("prompt")
+    custom_dispatcher_context = dispatcher_config.get("actingNotes")
+    custom_driver_prompt = driver_config.get("prompt")
+    custom_driver_context = driver_config.get("actingNotes")
+    
+    logger.info(f"=== CUSTOM PROMPTS ===")
+    logger.info(f"Extracted dispatcher prompt: {repr(custom_dispatcher_prompt)[:200]}")
+    logger.info(f"Dispatcher custom prompt: {'YES' if custom_dispatcher_prompt else 'NO'}")
+    if custom_dispatcher_prompt:
+        logger.info(f"  Length: {len(custom_dispatcher_prompt)} chars")
+        logger.info(f"  Preview: {custom_dispatcher_prompt[:100]}...")
+    logger.info(f"Dispatcher context: {'YES' if custom_dispatcher_context else 'NO'}")
+    
+    logger.info(f"Extracted driver prompt: {repr(custom_driver_prompt)[:200]}")
+    logger.info(f"Driver custom prompt: {'YES' if custom_driver_prompt else 'NO'}")
+    if custom_driver_prompt:
+        logger.info(f"  Length: {len(custom_driver_prompt)} chars")
+        logger.info(f"  Preview: {custom_driver_prompt[:100]}...")
+    logger.info(f"Driver context: {'YES' if custom_driver_context else 'NO'}")
+    
+    # DEBUG: Log what we're passing to agents
+    logger.info(f"=== PASSING TO AGENTS ===")
+    logger.info(f"About to create DispatcherAgent with custom_prompt={custom_dispatcher_prompt is not None}")
+    logger.info(f"About to create DriverAgent with custom_prompt={custom_driver_prompt is not None}")
+    
+    # Create agent instances first to get their instructions
+    dispatcher_agent = DispatcherAgent(
+        custom_prompt=custom_dispatcher_prompt,
+        context=custom_dispatcher_context
+    )
+    driver_agent = DriverAgent(
+        custom_prompt=custom_driver_prompt,
+        context=custom_driver_context
+    )
+    
+    logger.info(f"Dispatcher agent instructions length: {len(dispatcher_agent.instructions)} chars")
+    logger.info(f"Driver agent instructions length: {len(driver_agent.instructions)} chars")
+    
+    # Create agent sessions
+    # Note: Instructions will be applied when session.start() is called with the agent
+    logger.info("Creating agent sessions...")
     dispatcher_session = AgentSession(
         llm=openai.realtime.RealtimeModel(
             model="gpt-4o-realtime-preview-2024-12-17",
@@ -54,7 +182,6 @@ async def entrypoint(ctx: JobContext):
         ),
     )
     
-    # Session 2: Driver Agent
     driver_session = AgentSession(
         llm=openai.realtime.RealtimeModel(
             model="gpt-4o-realtime-preview-2024-12-17",
@@ -63,35 +190,40 @@ async def entrypoint(ctx: JobContext):
         ),
     )
     
-    logger.info("Starting both agent sessions...")
-    
-    # Get custom prompts if available
-    custom_dispatcher_prompt = dispatcher_config.get("prompt")
-    custom_dispatcher_context = dispatcher_config.get("actingNotes")
-    custom_driver_prompt = driver_config.get("prompt")
-    custom_driver_context = driver_config.get("actingNotes")
-    
     # Start dispatcher session
     logger.info("Starting dispatcher session...")
     await dispatcher_session.start(
         room=ctx.room, 
-        agent=DispatcherAgent(
-            custom_prompt=custom_dispatcher_prompt,
-            context=custom_dispatcher_context
-        )
+        agent=dispatcher_agent
     )
     logger.info("✓ Dispatcher agent session started")
+    
+    # CRITICAL: Explicitly set session instructions after start
+    # The session should use agent instructions, but we ensure it here
+    logger.info("Ensuring dispatcher session uses agent instructions...")
+    try:
+        # Try to update session instructions if method exists
+        await dispatcher_session.update_instructions(dispatcher_agent.instructions)
+        logger.info("✓ Dispatcher instructions updated via update_instructions()")
+    except AttributeError:
+        logger.info("Note: update_instructions() not available, relying on agent's instructions")
     
     # Start driver session
     logger.info("Starting driver session...")
     await driver_session.start(
         room=ctx.room, 
-        agent=DriverAgent(
-            custom_prompt=custom_driver_prompt,
-            context=custom_driver_context
-        )
+        agent=driver_agent
     )
     logger.info("✓ Driver agent session started")
+    
+    # CRITICAL: Explicitly set session instructions after start
+    logger.info("Ensuring driver session uses agent instructions...")
+    try:
+        # Try to update session instructions if method exists
+        await driver_session.update_instructions(driver_agent.instructions)
+        logger.info("✓ Driver instructions updated via update_instructions()")
+    except AttributeError:
+        logger.info("Note: update_instructions() not available, relying on agent's instructions")
     
     # Log current participants
     participants = list(ctx.room.remote_participants.values())
@@ -150,8 +282,13 @@ async def entrypoint(ctx: JobContext):
                 conversation_context=conversation_context
             )
             
-            # Update the session with new agent instance
+            # Update the session with new agent instance AND update LLM instructions
             driver_session._agent = updated_driver_agent
+            # CRITICAL: Also update the LLM instructions to reflect the new context
+            if hasattr(driver_session._llm, 'update_instructions'):
+                driver_session._llm.update_instructions(updated_driver_agent.instructions)
+            elif hasattr(driver_session._llm, '_instructions'):
+                driver_session._llm._instructions = updated_driver_agent.instructions
             
             await driver_session.generate_reply()
             logger.info(f"✓ Driver spoke")
@@ -184,8 +321,13 @@ async def entrypoint(ctx: JobContext):
                 conversation_context=conversation_context
             )
             
-            # Update the session with new agent instance
+            # Update the session with new agent instance AND update LLM instructions
             dispatcher_session._agent = updated_dispatcher_agent
+            # CRITICAL: Also update the LLM instructions to reflect the new context
+            if hasattr(dispatcher_session._llm, 'update_instructions'):
+                dispatcher_session._llm.update_instructions(updated_dispatcher_agent.instructions)
+            elif hasattr(dispatcher_session._llm, '_instructions'):
+                dispatcher_session._llm._instructions = updated_dispatcher_agent.instructions
             
             await dispatcher_session.generate_reply()
             logger.info(f"✓ Dispatcher spoke")
