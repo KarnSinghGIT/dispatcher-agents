@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { LiveKitRoom, RoomAudioRenderer, useParticipants } from '@livekit/components-react';
 import type { RoomInfo } from '../types';
+import { ConversationPlayer } from './ConversationPlayer';
+import { checkConversationStatus, getRecording } from '../services/api';
 import './ConversationRoom.css';
 
 interface ConversationRoomProps {
@@ -10,6 +12,9 @@ interface ConversationRoomProps {
 function RoomParticipants() {
   const participants = useParticipants();
   const [showWarning, setShowWarning] = useState(false);
+  const [conversationConcluded, setConversationConcluded] = useState(false);
+  const [recordingUrl, setRecordingUrl] = useState<string | undefined>();
+  const [transcriptData, setTranscriptData] = useState<any[]>([]);
   
   // Filter out the observer (frontend user)
   const agents = participants.filter(p => 
@@ -38,6 +43,18 @@ function RoomParticipants() {
     
     return () => clearTimeout(timer);
   }, [agents.length]);
+
+  // Monitor for conversation conclusion (agents left room)
+  useEffect(() => {
+    if (agents.length === 0 && !conversationConcluded && showWarning === false) {
+      // Conversation has concluded
+      setConversationConcluded(true);
+      console.log('Conversation concluded - agents left room');
+      
+      // Try to get recording info
+      // Note: This will need to be fetched with the room name
+    }
+  }, [agents.length, conversationConcluded, showWarning]);
   
   return (
     <div>
@@ -102,6 +119,21 @@ cd backend && python agents/multi_agent_worker.py dev
 
 export const ConversationRoom: React.FC<ConversationRoomProps> = ({ roomInfo }) => {
   const [roomState, setRoomState] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
+  const [showPlayer, setShowPlayer] = useState(false);
+  const [playerData, setPlayerData] = useState<{ recordingUrl?: string; transcript?: any[] }>({});
+
+  // Helper function to extract participant info from room
+  const fetchRecordingData = async () => {
+    try {
+      const recordingData = await getRecording(roomInfo.roomName);
+      setPlayerData({
+        recordingUrl: recordingData.recordings?.[0]?.location,
+        transcript: [] // Will be populated if we have transcript data
+      });
+    } catch (error) {
+      console.error('Could not fetch recording:', error);
+    }
+  };
 
   return (
     <div className="conversation-room">
@@ -122,7 +154,11 @@ export const ConversationRoom: React.FC<ConversationRoomProps> = ({ roomInfo }) 
         audio={false}
         video={false}
         onConnected={() => setRoomState('connected')}
-        onDisconnected={() => setRoomState('disconnected')}
+        onDisconnected={() => {
+          setRoomState('disconnected');
+          setShowPlayer(true);
+          fetchRecordingData();
+        }}
         className="livekit-room-container"
       >
         {/* Render audio for all participants */}
@@ -137,7 +173,7 @@ export const ConversationRoom: React.FC<ConversationRoomProps> = ({ roomInfo }) 
             </div>
           )}
 
-          {roomState === 'connected' && (
+          {roomState === 'connected' && !showPlayer && (
             <>
               <div className="listening-indicator">
                 <div className="pulse-dot"></div>
@@ -153,9 +189,25 @@ export const ConversationRoom: React.FC<ConversationRoomProps> = ({ roomInfo }) 
             </>
           )}
 
-          {roomState === 'disconnected' && (
+          {showPlayer && (
+            <div className="playback-section">
+              <ConversationPlayer
+                conversationId={roomInfo.conversationId}
+                recordingUrl={playerData.recordingUrl}
+                transcript={playerData.transcript}
+              />
+            </div>
+          )}
+
+          {roomState === 'disconnected' && !showPlayer && (
             <div className="room-status">
               <p>❌ Disconnected from room</p>
+              <button
+                onClick={() => setShowPlayer(true)}
+                className="show-player-btn"
+              >
+                🎙️ Replay Conversation
+              </button>
             </div>
           )}
         </div>
